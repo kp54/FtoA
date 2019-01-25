@@ -1,0 +1,5 @@
+Cython==0.28.5
+ffmpeg-python==0.1.16
+future==0.16.0
+pkg-resources==0.0.0
+pytaglib==1.4.3
