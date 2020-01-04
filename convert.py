@@ -31,7 +31,7 @@ def convert(src, dest):
             abs_d = os.path.splitext(abs_d)[0]+'.m4a'
 
             try:
-                ffmpeg.input(abs_s).output(abs_d, map='0:a', acodec='alac', loglevel='error').run()
+                ffmpeg.input(abs_s).output(abs_d, acodec='alac', vcodec='png', loglevel='error').run()
             except ffmpeg.Error:
                 err.append(abs_s)
 
