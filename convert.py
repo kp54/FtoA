@@ -1,10 +1,12 @@
 # flacをalacに変換するやつ
 
 import argparse
+import copy
 import os
 import os.path
 
 import ffmpeg
+import taglib
 
 
 def parse_args():
@@ -44,6 +46,31 @@ def convert(src, dest):
                 ffmpeg.input(abs_s).output(abs_d, acodec='alac', vcodec='png', loglevel='error').run()
             except ffmpeg.Error:
                 err.append(abs_s)
+
+            fp = None
+            try:
+                fp = taglib.File(abs_s)
+                tags = copy.deepcopy(fp.tags)
+            finally:
+                if fp:
+                    fp.close()
+
+            try:
+                tags['DISCNUMBER'][0] = f"{tags['DISCNUMBER'][0]}/{tags['DISCTOTAL'][0]}"
+                tags['TRACKNUMBER'][0] = f"{tags['TRACKNUMBER'][0]}/{tags['TRACKTOTAL'][0]}"
+                del tags['DISCTOTAL']
+                del tags['TRACKTOTAL']
+            except KeyError:
+                err.append(abs_s)
+
+            fp = None
+            try:
+                fp = taglib.File(abs_d)
+                fp.tags = tags
+                fp.save()
+            finally:
+                if fp:
+                    fp.close()
 
     print('\nerror:\n'+'\n'.join(err))
 
