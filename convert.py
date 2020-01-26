@@ -1,8 +1,18 @@
 # flacをalacに変換するやつ
 
+import argparse
 import os
 import os.path
+
 import ffmpeg
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('src', help='source directory')
+    parser.add_argument('out', help='output directory')
+
+    return parser.parse_args()
 
 
 def convert(src, dest):
@@ -41,10 +51,9 @@ def convert(src, dest):
 
 
 def main():
-    SRC = '/path/to/source/'
-    DEST = '/path/to/destination/'
+    args = parse_args()
 
-    convert(SRC, DEST)
+    convert(args.src, args.out)
 
     return 0
 
