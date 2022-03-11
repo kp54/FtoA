@@ -19,7 +19,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def convert(src: Path, dest: Path) -> bool:
+def convert(src: Path, dest: Path) -> Exception | None:
     try:
         ffmpeg.input(src.as_posix()).output(
             dest.as_posix(),
@@ -28,20 +28,19 @@ def convert(src: Path, dest: Path) -> bool:
             loglevel="error",
         ).run()
     except ffmpeg.Error as err:
-        print(err)
-        return False
+        # ffmpeg-python の型定義を mypy が認識できないため無視させる
+        return err  # type: ignore
 
-    return True
+    return None
 
 
-def copy_meta(src: Path, dest: Path) -> bool:
+def copy_meta(src: Path, dest: Path) -> Exception | None:
     fp = None
     try:
         fp = taglib.File(src.as_posix())
         tags = copy.deepcopy(fp.tags)
     except OSError as err:
-        print(err)
-        return False
+        return err
     finally:
         if fp:
             fp.close()
@@ -52,8 +51,7 @@ def copy_meta(src: Path, dest: Path) -> bool:
         del tags["DISCTOTAL"]
         del tags["TRACKTOTAL"]
     except KeyError as err:
-        print(err)
-        return False
+        return err
 
     fp = None
     try:
@@ -61,13 +59,12 @@ def copy_meta(src: Path, dest: Path) -> bool:
         fp.tags = tags
         fp.save()
     except OSError as err:
-        print(err)
-        return False
+        return err
     finally:
         if fp:
             fp.close()
 
-    return True
+    return None
 
 
 def process_tree(srcroot: Path, destroot: Path) -> None:
@@ -86,13 +83,15 @@ def process_tree(srcroot: Path, destroot: Path) -> None:
             print(f"skipping existing file: {rel_conv_dest.as_posix()}")
             return
 
-        print(f"processing: {rel_src}")
+        print(f"processing: {rel_src.as_posix()}")
 
-        if not convert(src, conv_dest):
+        if (err := convert(src, conv_dest)) is not None:
+            print(err)
             errors.append(rel_src.as_posix())
             return
 
-        if not copy_meta(src, conv_dest):
+        if (err := copy_meta(src, conv_dest)) is not None:
+            print(err)
             errors.append(rel_src.as_posix())
             return
 
