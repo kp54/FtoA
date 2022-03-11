@@ -27,7 +27,8 @@ def convert(src: Path, dest: Path) -> bool:
             vcodec="png",
             loglevel="error",
         ).run()
-    except ffmpeg.Error:
+    except ffmpeg.Error as err:
+        print(err)
         return False
 
     return True
@@ -38,6 +39,9 @@ def copy_meta(src: Path, dest: Path) -> bool:
     try:
         fp = taglib.File(src.as_posix())
         tags = copy.deepcopy(fp.tags)
+    except OSError as err:
+        print(err)
+        return False
     finally:
         if fp:
             fp.close()
@@ -47,7 +51,8 @@ def copy_meta(src: Path, dest: Path) -> bool:
         tags["TRACKNUMBER"][0] = f"{tags['TRACKNUMBER'][0]}/{tags['TRACKTOTAL'][0]}"
         del tags["DISCTOTAL"]
         del tags["TRACKTOTAL"]
-    except KeyError:
+    except KeyError as err:
+        print(err)
         return False
 
     fp = None
@@ -55,6 +60,9 @@ def copy_meta(src: Path, dest: Path) -> bool:
         fp = taglib.File(dest.as_posix())
         fp.tags = tags
         fp.save()
+    except OSError as err:
+        print(err)
+        return False
     finally:
         if fp:
             fp.close()
