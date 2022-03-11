@@ -2,90 +2,109 @@
 
 import argparse
 import copy
-import os
-import os.path
+from pathlib import Path
+from typing import List
 
 import ffmpeg
 import taglib
 
+import dirtree
 
-def parse_args():
+
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument('src', help='source directory')
-    parser.add_argument('out', help='output directory')
+    parser.add_argument("src", type=Path, help="source directory")
+    parser.add_argument("dest", type=Path, help="destination directory")
 
     return parser.parse_args()
 
 
-def convert(src, dest):
-    que = os.listdir(src)
-    err = list()
+def convert(src: Path, dest: Path) -> bool:
+    try:
+        ffmpeg.input(src.as_posix()).output(
+            dest.as_posix(),
+            acodec="alac",
+            vcodec="png",
+            loglevel="error",
+        ).run()
+    except ffmpeg.Error:
+        return False
 
-    while que:
-        rel = que.pop()
-        abs_s = os.path.join(src, rel)
-        abs_d = os.path.join(dest, rel)
+    return True
 
-        if os.path.isdir(abs_s):
-            if os.path.exists(abs_d):
-                print(f'skipping: {rel}')
-                continue
-            os.mkdir(abs_d)
-            print(f'scanning: {rel}')
 
-            try:
-                que.extend(map(lambda x: os.path.join(rel, x), os.listdir(abs_s)))
-            except PermissionError:
-                print(f'permission error: {rel}')
+def copy_meta(src: Path, dest: Path) -> bool:
+    fp = None
+    try:
+        fp = taglib.File(src.as_posix())
+        tags = copy.deepcopy(fp.tags)
+    finally:
+        if fp:
+            fp.close()
 
-        elif os.path.isfile(abs_s):
-            print(f'processing: {rel}')
-            abs_d = os.path.splitext(abs_d)[0]+'.m4a'
+    try:
+        tags["DISCNUMBER"][0] = f"{tags['DISCNUMBER'][0]}/{tags['DISCTOTAL'][0]}"
+        tags["TRACKNUMBER"][0] = f"{tags['TRACKNUMBER'][0]}/{tags['TRACKTOTAL'][0]}"
+        del tags["DISCTOTAL"]
+        del tags["TRACKTOTAL"]
+    except KeyError:
+        return False
 
-            try:
-                ffmpeg.input(abs_s).output(abs_d, acodec='alac', vcodec='png', loglevel='error').run()
-            except ffmpeg.Error:
-                err.append(abs_s)
+    fp = None
+    try:
+        fp = taglib.File(dest.as_posix())
+        fp.tags = tags
+        fp.save()
+    finally:
+        if fp:
+            fp.close()
 
-            fp = None
-            try:
-                fp = taglib.File(abs_s)
-                tags = copy.deepcopy(fp.tags)
-            finally:
-                if fp:
-                    fp.close()
+    return True
 
-            try:
-                tags['DISCNUMBER'][0] = f"{tags['DISCNUMBER'][0]}/{tags['DISCTOTAL'][0]}"
-                tags['TRACKNUMBER'][0] = f"{tags['TRACKNUMBER'][0]}/{tags['TRACKTOTAL'][0]}"
-                del tags['DISCTOTAL']
-                del tags['TRACKTOTAL']
-            except KeyError:
-                err.append(abs_s)
 
-            fp = None
-            try:
-                fp = taglib.File(abs_d)
-                fp.tags = tags
-                fp.save()
-            finally:
-                if fp:
-                    fp.close()
+def process_tree(srcroot: Path, destroot: Path) -> None:
+    errors: List[str] = []
 
-    print('\nerror:\n'+'\n'.join(err))
+    def process(src: Path, dest: Path) -> None:
+        rel_src = src.relative_to(srcroot)
+        conv_dest = dest.with_suffix(".m4a")
+        rel_conv_dest = conv_dest.relative_to(destroot)
+
+        if src.suffix != ".flac":
+            print(f"skipping non-flac file: {rel_src.as_posix()}")
+            return
+
+        if conv_dest.exists():
+            print(f"skipping existing file: {rel_conv_dest.as_posix()}")
+            return
+
+        print(f"processing: {rel_src}")
+
+        if not convert(src, conv_dest):
+            errors.append(rel_src.as_posix())
+            return
+
+        if not copy_meta(src, conv_dest):
+            errors.append(rel_src.as_posix())
+            return
+
+    dirtree.mirror(srcroot, destroot, process)
+
+    if errors:
+        print("\nerrors:\n" + "\n".join(errors))
 
     return
 
 
-def main():
+def main() -> int:
     args = parse_args()
 
-    convert(args.src, args.out)
+    process_tree(args.src, args.dest)
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
 
     sys.exit(main())
