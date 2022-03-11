@@ -40,7 +40,12 @@ def get_album_name(path: Path) -> Tuple[str, None] | Tuple[None, Exception]:
 
 
 def sanitize(name: str) -> str:
-    return name.replace("/", "_")
+    blacklist = ("\\", "/", ":", "*", "?", '"', "<", ">", "|")
+
+    for i in blacklist:
+        name = name.replace(i, "_")
+
+    return name
 
 
 def extract_cover(srcfile: Path, destdir: Path, name: str) -> Exception | None:
