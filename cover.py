@@ -1,67 +1,117 @@
 # カバーアート抽出するやつ
 
-import os
-import os.path
+import argparse
+from pathlib import Path
+from typing import List, Tuple
+import typing
+
 import ffmpeg
 import taglib
 
+import dirtree
 
-def extract(src, dest):
-    que = os.listdir(src)
-    psd = list()
-    err = list()
-
-    abs_d = os.path.join(dest, 'cover/')
-    if not os.path.exists(abs_d):
-        os.mkdir(abs_d)
-
-    while que:
-        rel = que.pop()
-        abs_s = os.path.join(src, rel)
-
-        if os.path.isdir(abs_s):
-            print(f'scanning: {rel}')
-
-            try:
-                que.extend(map(lambda x: os.path.join(rel, x), os.listdir(abs_s)))
-            except PermissionError:
-                print(f'permission error: {rel}')
-
-        elif os.path.isfile(abs_s):
-            try:
-                fp = taglib.File(abs_s)
-                alb = fp.tags['ALBUM'][0]
-            finally:
-                fp.close()
-
-            if alb in psd:
-                print(f'skipping: {rel}')
-                continue
-            psd.append(alb)
-
-            print(f'processing: {rel}')
-            abs_d = os.path.join(dest, f'cover/{alb.replace("/", "_")}_%02d.png')
-
-            try:
-                ffmpeg.input(abs_s).output(abs_d, map='0:v', vcodec='png', loglevel='error').run()
-            except ffmpeg.Error:
-                err.append(abs_s)
-
-    print('\nerror:\n'+'\n'.join(err))
-
-    return
+T = typing.TypeVar("T")
 
 
-def main():
-    SRC = '/path/to/source/'
-    DEST = '/path/to/destination/'
+def assert_not_none(obj: T | None) -> T:
+    if obj is None:
+        raise RuntimeError
+    return obj
 
-    extract(SRC, DEST)
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("src", type=Path, help="source directory")
+    parser.add_argument("dest", type=Path, help="destination directory")
+
+    return parser.parse_args()
+
+
+def get_album_name(path: Path) -> Tuple[str, None] | Tuple[None, Exception]:
+    fp = None
+    try:
+        fp = taglib.File(path.as_posix())
+        return (fp.tags["ALBUM"][0], None)
+    except OSError as err:
+        return (None, err)
+    finally:
+        if fp:
+            fp.close()
+
+
+def sanitize(name: str) -> str:
+    return name.replace("/", "_")
+
+
+def extract_cover(srcfile: Path, destdir: Path, name: str) -> Exception | None:
+    destpath = destdir.joinpath(f"{name}_%02d.png")
+
+    try:
+        ffmpeg.input(srcfile.as_posix()).output(
+            destpath.as_posix(),
+            map="0:v",
+            vcodec="png",
+            loglevel="error",
+        ).run()
+    except ffmpeg.Error as err:
+        # ffmpeg-python の型定義を mypy が認識できないため無視させる
+        return err  # type: ignore
+
+    return None
+
+
+def process_tree(srcroot: Path, dest: Path) -> None:
+    if not dest.exists():
+        raise FileNotFoundError(dest)
+    if not dest.is_dir():
+        raise NotADirectoryError(dest)
+
+    errors: List[str] = []
+    processed_albums: List[str] = []
+
+    def process(src: Path) -> None:
+        rel_src = src.relative_to(srcroot)
+
+        if not src.is_file():
+            return
+
+        album_name, err = get_album_name(src)
+        if err is not None:
+            print(err)
+            errors.append(rel_src.as_posix())
+            return
+
+        # err が None の場合 album_name は None ではない
+        sanitized_album_name = sanitize(assert_not_none(album_name))
+
+        if sanitized_album_name in processed_albums:
+            print(f"skipping: {rel_src.as_posix()}")
+            return
+
+        print(f"processing: {rel_src.as_posix()}")
+
+        if (err := extract_cover(src, dest, sanitized_album_name)) is not None:
+            print(err)
+            errors.append(rel_src.as_posix())
+            return
+
+        processed_albums.append(sanitized_album_name)
+
+    dirtree.walk(srcroot, process)
+
+    if errors:
+        print("\nerrors:\n" + "\n".join(errors))
+
+
+def main() -> int:
+    args = parse_args()
+
+    process_tree(args.src, args.dest)
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
 
     sys.exit(main())
