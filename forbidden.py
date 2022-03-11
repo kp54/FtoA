@@ -1,51 +1,68 @@
 # Windowsの禁則文字に対応するやつ
 
-import os
-import os.path
+import argparse
+from pathlib import Path
+from typing import List
+
+import dirtree
 
 
-def _rename(src):
-    forbidden = ('\\', '/', ':', '*', '?', '"', '<', '>', '|')
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("root", type=Path, help="root directory for process")
 
-    path, target = os.path.split(src)
+    return parser.parse_args()
+
+
+def replace_forbidden_character(filename: str) -> str:
+    forbidden = ("\\", "/", ":", "*", "?", '"', "<", ">", "|")
 
     for i in forbidden:
-        target = target.replace(i, '_')
+        filename = filename.replace(i, "_")
 
-    dest = os.path.join(path, target)
-    os.rename(src, dest)
-
-    return dest
+    return filename
 
 
-def rename(target):
-    que = os.listdir(target)
+def rename(src: Path, dest: Path) -> Exception | None:
+    try:
+        src.rename(dest)
+    except PermissionError as err:
+        return err
 
-    while que:
-        rel = que.pop()
-        abs_ = os.path.join(target, rel)
-        if os.path.isdir(abs_):
-            print(f'entering: {rel}')
-            abs_ = _rename(abs_)
-            try:
-                que.extend(map(lambda x: os.path.join(rel, x), os.listdir(abs_)))
-            except PermissionError:
-                print(f'permission error: {rel}')
-
-        elif os.path.isfile(abs_):
-            print(f'processing {rel}')
-            _rename(abs_)
+    return None
 
 
-def main():
-    TARGET = '/path/to/target/'
+def process_tree(root: Path) -> None:
+    errors: List[str] = []
 
-    rename(TARGET)
+    def process(path: Path) -> None:
+        rel_path = path.relative_to(root)
+
+        if not path.is_file():
+            return
+
+        new_name = replace_forbidden_character(path.name)
+
+        if (err := rename(path, path.with_name(new_name))) is not None:
+            print(err)
+            errors.append(rel_path.as_posix())
+            return
+
+    dirtree.walk(root, process)
+
+    if len(errors) != 0:
+        print("\nerrors:\n" + "\n".join(errors))
+
+
+def main() -> int:
+    args = parse_args()
+
+    process_tree(args.root)
 
     return 0
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import sys
 
     sys.exit(main())
