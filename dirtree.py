@@ -3,6 +3,20 @@ from pathlib import Path
 from typing import Any, Callable
 
 
+def walk(root: Path, processor: Callable[[Path], Any]) -> None:
+    if not root.exists():
+        raise FileNotFoundError(root)
+    if not root.is_dir():
+        raise NotADirectoryError(root)
+
+    for (str_current, directories, files) in os.walk(root):
+        current = Path(str_current)
+
+        for i in files + directories:
+            path = current.joinpath(i)
+            processor(path)
+
+
 def mirror(
     srcroot: Path,
     destroot: Path,
@@ -17,27 +31,17 @@ def mirror(
     if not destroot.is_dir():
         raise NotADirectoryError(destroot)
 
-    for (strsrccwd, directories, files) in os.walk(srcroot):
-        srccwd = Path(strsrccwd)
-        relativecwd = srccwd.relative_to(srcroot)
-        destcwd = destroot.joinpath(relativecwd)
+    def process(src: Path) -> None:
+        rel_src = src.relative_to(srcroot)
+        dest = destroot.joinpath(rel_src)
 
-        for i in files:
-            srcpath = srccwd.joinpath(i)
-            destpath = destcwd.joinpath(i)
+        if src.is_file() and processor is not None:
+            processor(src, dest)
 
-            if processor is None:
-                continue
+        if src.is_dir() and not dest.exists():
+            dest.mkdir()
 
-            processor(srcpath, destpath)
-
-        for i in directories:
-            destpath = destcwd.joinpath(i)
-
-            if destpath.exists():
-                continue
-
-            destpath.mkdir()
+    walk(srcroot, process)
 
 
 def main() -> None:
