@@ -28,8 +28,7 @@ def convert(src: Path, dest: Path) -> Exception | None:
             loglevel="error",
         ).run()
     except ffmpeg.Error as err:
-        # ffmpeg-python の型定義を mypy が認識できないため無視させる
-        return err  # type: ignore
+        return err
 
     return None
 

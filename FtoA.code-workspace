@@ -8,7 +8,6 @@
 		"recommendations": [
 			"ms-python.black-formatter",
 			"ms-python.flake8",
-			"ms-python.mypy-type-checker",
 			"ms-python.python",
 			"ms-python.vscode-pylance",
 		],
@@ -16,18 +15,12 @@
 	"settings": {
 		"editor.formatOnSave": true,
 		"python.languageServer": "Pylance",
+		"python.analysis.typeCheckingMode": "basic",
 		"[python]": {
 			"editor.defaultFormatter": "ms-python.black-formatter"
 		},
 		"flake8.args": [
 			"--max-line-length=88",
-		],
-		"mypy-type-checker.args": [
-			"--strict",
-			"--follow-imports=silent",
-			"--ignore-missing-imports",
-			"--show-column-numbers",
-			"--no-pretty",
 		],
 	},
 }

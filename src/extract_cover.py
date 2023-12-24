@@ -59,8 +59,7 @@ def extract_cover(srcfile: Path, destdir: Path, name: str) -> Exception | None:
             loglevel="error",
         ).run()
     except ffmpeg.Error as err:
-        # ffmpeg-python の型定義を mypy が認識できないため無視させる
-        return err  # type: ignore
+        return err
 
     return None
 
