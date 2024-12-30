@@ -1,3 +1,4 @@
 ffmpeg-python==0.2.0
-future==0.18.3
-pytaglib==2.1.0
+future==1.0.0
+pytaglib==3.0.0
+wheel==0.45.1
